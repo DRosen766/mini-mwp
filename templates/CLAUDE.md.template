@@ -1,0 +1,67 @@
+# {{ProjectName}} — Project Notes
+
+> **Stable operating manual.** Project-specific conventions, gotchas, and "how this thing works." Update when something durable changes — never for routine state changes.
+
+> **Start every session by reading `STATUS.md`.** That file holds the live "where are we / what's next" state. After making progress, update it. Don't touch this file for routine state changes.
+
+Read `ARCHITECTURE_PLAN.md` for the full design rationale; this file is the operating manual; `STATUS.md` is the ticker.
+
+---
+
+## Working convention: Interpretable Context (mini-MWP)
+
+This repo follows my mini-MWP methodology — a personal adaptation of the [Model Workspace Protocol](https://arxiv.org/abs/2603.16021). In short: filesystem-structured stages, markdown-as-context, single agent with human review between stages, and PR-per-worktree as the handoff mechanism. See `~/mini-mwp/methodology/` for the full writeup.
+
+---
+
+## Workflow rule: always PR into `main`, via a worktree
+
+**Never commit directly to `main`.** Use:
+
+```bash
+git worktree add ../{{repoSlug}}-wt-<short-slug> -b <branch-name> main
+```
+
+Then `cd` into the worktree, work there, push, open PR. After merge: `git worktree remove ../{{repoSlug}}-wt-<short-slug>` + `git branch -d <branch>`.
+
+Default behavior even for one-line fixes. Only skip if I explicitly say so.
+
+---
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| {{Layer 1}} | {{Tech}} |
+| {{Layer 2}} | {{Tech}} |
+
+## Repo layout
+
+```
+{{TBD}}
+```
+
+---
+
+## Conventions and gotchas
+
+Each entry: lead with the rule in bold, then the symptom or context that surfaces it, then the fix or workaround.
+
+- **{{First convention}}** — symptom / context / fix.
+
+- **{{Second convention}}** — symptom / context / fix.
+
+---
+
+## Common workflows
+
+```bash
+# {{description}}
+{{command}}
+```
+
+---
+
+## Cross-project lessons
+
+Generalizable lessons live in `~/mini-mwp/learnings/`. Project-specific gotchas stay here.

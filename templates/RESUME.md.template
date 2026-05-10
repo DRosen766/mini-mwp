@@ -1,0 +1,43 @@
+# Resume checklist
+
+What to do when you're back at your Mac, in order. Read this on your phone first if you want; everything actionable is below.
+
+## State (as of this session)
+
+| Component | Status |
+|---|---|
+| {{Component}} | ✅ done |
+| {{Component}} | ⏳ pending |
+| {{Component}} | ⏳ blocked on {{external}} |
+
+## What you can verify now from your phone
+
+Sanity checks — none are required, just reassuring:
+
+1. {{Thing to glance at}}
+2. {{Thing to glance at}}
+
+## When you're back at your Mac
+
+### 1. {{First step}} ({{time estimate}})
+
+```bash
+{{command}}
+```
+
+Expect: {{success criterion}}.
+
+### 2. {{Second step}} ({{time estimate}})
+
+{{...}}
+
+## Code changes from this session you should know about
+
+- {{Thing future-you would benefit from a heads-up on}}
+
+## Reference
+
+- Architecture: `ARCHITECTURE_PLAN.md`
+- Setup: `README.md`
+- Operating manual: `CLAUDE.md`
+- Live status: `STATUS.md`

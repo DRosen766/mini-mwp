@@ -1,0 +1,35 @@
+# Status
+
+Living status file. Any agent session in this repo MUST:
+
+1. Read this file at the start of work.
+2. Pick the top item from **Next up** unless instructed otherwise.
+3. As work progresses, move items between sections (Next up → Now → Done / Blocked).
+4. Append a one-line entry to **Activity log** with date and a terse summary of what changed.
+5. Keep `Done` to the most recent ~10–15 items; trim older ones.
+6. If a new piece of work is discovered, add it to **Next up** in priority order rather than acting silently.
+
+This file is the single source of truth for "where are we." `CLAUDE.md` is the stable operating manual; `STATUS.md` is the live ticker.
+
+---
+
+## Now
+
+- {{What's actively being worked on right now}}
+
+## Next up
+
+- {{Next item in priority order}}
+- {{...}}
+
+## Blocked
+
+_(none)_
+
+## Done
+
+- {{YYYY-MM-DD}} — {{terse summary}}
+
+## Activity log
+
+- {{YYYY-MM-DD}} — {{actor}} — {{terse summary of what changed this session}}
