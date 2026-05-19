@@ -10,8 +10,9 @@ A context-storage repo, not a product. It captures:
 - **`conventions/`** — per-project conventions distilled from real repos.
 - **`templates/`** — reusable starter files I drop into new projects.
 - **`learnings/`** — cross-project meta-lessons accumulated over time.
+- **`skills/`** — repo-agnostic Claude skills that operationalize the methodology. Designed to be consumed by product repos that mount this repo as a submodule and symlink the skills into `.claude/skills/`.
 
-The goal is for this repo to eventually become a portable seed I can clone (or load as Cowork project context) at the start of any new project.
+The goal is for this repo to eventually become a portable seed I can clone (or mount as a submodule) at the start of any new project.
 
 ## Origin
 
