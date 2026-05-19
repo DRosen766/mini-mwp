@@ -11,6 +11,7 @@ A context-storage repo, not a product. It captures:
 - **`templates/`** — reusable starter files I drop into new projects.
 - **`learnings/`** — cross-project meta-lessons accumulated over time.
 - **`skills/`** — repo-agnostic Claude skills that operationalize the methodology. Designed to be consumed by product repos that mount this repo as a submodule and symlink the skills into `.claude/skills/`.
+- **`scripts/`** — deterministic, non-AI shell utilities that operate on a product repo that has mini-mwp mounted as a submodule. Idempotent. Start with `./mini-mwp/scripts/install.sh` from the product repo root.
 
 The goal is for this repo to eventually become a portable seed I can clone (or mount as a submodule) at the start of any new project.
 

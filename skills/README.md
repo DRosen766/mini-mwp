@@ -10,32 +10,27 @@ More will land as methodology pieces stabilize.
 
 ## How a product repo wires these in
 
-mini-mwp is intended to be added to a product repo as a submodule:
+mini-mwp is added to a product repo as a submodule, then the installer wires per-skill symlinks into `.claude/skills/`:
 
 ```bash
 # from the product repo root
 git submodule add <mini-mwp-remote> mini-mwp
+./mini-mwp/scripts/install.sh
 ```
 
-Then symlink the skills into the product repo's Claude skills directory. Two patterns work:
+The installer is idempotent — re-run it after `git submodule update --remote` to pick up new skills. See `scripts/README.md` for what it does.
 
-### Whole-folder symlink (simpler)
+### Why per-skill symlinks (not a whole-folder symlink)
 
-```bash
-mkdir -p .claude/skills
-ln -s ../../mini-mwp/skills .claude/skills/mini-mwp
-```
+Claude Code looks for one skill per direct child of `.claude/skills/`. Symlinking the whole `mini-mwp/skills/` folder under a namespace would put skills at `.claude/skills/mini-mwp/<name>/SKILL.md`, which isn't the discovered layout. Per-skill symlinks (`.claude/skills/<name> -> ../../mini-mwp/skills/<name>`) keep each skill at the depth Claude Code expects.
 
-Every skill under `mini-mwp/skills/` becomes available, and pulling submodule updates surfaces new skills automatically. Slight cost: the product repo opts in to all skills, including ones it may not use.
-
-### Per-skill symlinks (more selective)
+### Manual setup (if you can't run the script)
 
 ```bash
 mkdir -p .claude/skills
 ln -s ../../mini-mwp/skills/status-update .claude/skills/status-update
+# … one symlink per skill
 ```
-
-The product repo explicitly opts in to each skill. New skills in the submodule won't appear until linked.
 
 ## Constraints these skills are written to
 
