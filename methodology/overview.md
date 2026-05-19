@@ -22,4 +22,5 @@ Full MWP formalization includes one folder per stage and one prompt file per sta
 - `file-roles.md` — what `CLAUDE.md`, `STATUS.md`, `ARCHITECTURE_PLAN.md`, and `RESUME.md` each do, and why they're separate.
 - `workflow-worktrees.md` — the worktree-per-task PR pattern that handles concurrent agent sessions.
 - `workflow-stages.md` — numbered-on-disk stages for migrations, plans, and ADRs.
+- `post-implementation-handoff.md` — what the agent's "done" message should contain so the user can verify in the running app.
 - `what-this-omits.md` — full-MWP machinery I deliberately don't use, with reasons.
