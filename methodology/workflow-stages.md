@@ -25,3 +25,7 @@ Order is encoded in filenames, not in framework code. The filesystem is the orch
 ## Per-feature plans
 
 A `docs/plans/000N_<feature>.md` document carries the stage-by-stage acceptance criteria for a multi-stage feature. The agent reads it to know what role to play in each stage. The plan itself is append-only once stages are shipped — completed stages get a "shipped" marker; later sections can be edited until they ship.
+
+## Pickup discipline
+
+The active plan is the "current phase." `STATUS.md`'s **Current phase** field names it, and the agent drains that plan's stages before picking from anywhere else — not from generic "Next up," not from a different plan, not from the issue tracker. The two carve-outs are a hard blocker on the current stage and an explicit user override. See `task-pickup.md` for the full rule set, including how phase handoff works when the last stage of a plan ships.
