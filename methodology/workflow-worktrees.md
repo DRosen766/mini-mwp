@@ -51,3 +51,9 @@ When a worktree's work is ready for the user to test (especially iOS), the agent
 ## Local pre-flight before pushing
 
 For changes that have a fast local validator (compile check, lint, smoke test), run it before declaring the work ready. CI is for catching mistakes that slipped through, not for running the first compile. Symptom this prevents: a 25-minute CI cycle to surface a missing import.
+
+## Docs ship with the change
+
+**Before opening the PR, update every doc the change makes stale — in the same PR.** If a stage changes behavior, config, or a known gotcha, the docs that describe it move with it: `CLAUDE.md` gotchas, `ARCHITECTURE_PLAN.md`, the relevant `docs/plans/000N_*.md`, an ADR if a decision changed. The doc edit is part of the stage, not a follow-up — a stage isn't ready to push until its code compiles *and* its docs match what it now does.
+
+**Why:** In mini-MWP the markdown *is* the context substrate the next agent session reads (`file-roles.md`). A PR that ships code but leaves the docs describing the old behavior hands the next session wrong context, and a separate "update the docs later" PR rarely gets written. Symptom this prevents: an agent reads a `CLAUDE.md` gotcha that the last merge already invalidated and re-introduces the bug the gotcha warned about.
