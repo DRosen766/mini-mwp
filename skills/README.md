@@ -4,9 +4,8 @@ Repo-agnostic skills that embody the mini-mwp methodology. Designed to be consum
 
 ## Available skills
 
+- **`create-issue/`** — file a GitHub issue, index it in the right `docs/plans/` phase doc, and land the doc edit via a worktree+PR.
 - **`status-update/`** — the STATUS.md live-ticker update protocol (see `methodology/file-roles.md`).
-
-More will land as methodology pieces stabilize.
 
 ## How a product repo wires these in
 
