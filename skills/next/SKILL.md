@@ -10,7 +10,7 @@ Pick the next task, open a worktree, and report what you're about to do. This sk
 The deliverables every run produces:
 
 1. A chosen task (from the current phase's plan).
-2. A worktree, created and `cd`-ed into, ready for work.
+2. A worktree, created via `EnterWorktree` and switched into, ready for work.
 3. A short message to the user: what was picked, why, and the worktree path.
 
 ---
@@ -19,7 +19,7 @@ The deliverables every run produces:
 
 ### 1. Read the methodology
 
-Read these two files (relative to the repo root) before doing anything else:
+Read these two files (relative to the mini-mwp submodule root) before doing anything else:
 
 - `mini-mwp/methodology/task-pickup.md` — the rules for choosing what to work on.
 - `mini-mwp/methodology/workflow-worktrees.md` — the worktree-first gate and PR workflow.
@@ -53,19 +53,19 @@ Find the next open stage or issue using the plan's own sequencing rules. Apply t
 
 Move the chosen task into **Now** in STATUS.md if it isn't already there. This happens in the main checkout (it's a status update, not a code change).
 
-### 5. Open a worktree
+### 5. Open a worktree — HARD GATE
 
-**This is a hard gate — no work happens without it.**
+**This is a hard gate. No reading source, no planning, no implementation, no file edits until the worktree exists and the session is inside it.**
 
-```bash
-SLUG=<short-kebab-slug>
-git worktree add ../<repo-wt-prefix>-$SLUG -b <branch-name> main
-cd ../<repo-wt-prefix>-$SLUG
+Use the `EnterWorktree` tool to create and switch into a worktree:
+
+```
+EnterWorktree({ name: "<short-kebab-slug-of-task>" })
 ```
 
-Follow the project's worktree naming convention if one exists (check `CLAUDE.md`). Default to `<repo-name>-wt-<slug>` as a sibling of the main checkout.
+This is **not optional**. Do not use `git worktree add` manually — the `EnterWorktree` tool is what actually switches the session's working directory. Manual `cd` after `git worktree add` does not persist across tool calls and is the reason worktrees get skipped in practice.
 
-Do not read source files, do not plan the implementation, do not touch anything until the worktree exists and you have `cd`-ed into it.
+**Verify you are in the worktree** after calling `EnterWorktree` — run `pwd` and confirm the path contains the worktree slug. If `EnterWorktree` fails, stop and report the error. Do not proceed with work in the main checkout as a fallback.
 
 ### 6. Report to the user
 
@@ -74,8 +74,8 @@ Print a short summary:
 ```
 Picked: <task title> (#<issue> if applicable)
 Phase: docs/plans/000N_<phase>.md
-Worktree: /absolute/path/to/<repo-wt-prefix>-<slug>
-Branch: <branch-name>
+Worktree: <pwd output from step 5>
+Branch: <branch name>
 ```
 
 Then begin working on the task inside the worktree.
@@ -87,4 +87,4 @@ Then begin working on the task inside the worktree.
 - Implement the task beyond opening the worktree — implementation follows immediately but is not part of the skill's contract.
 - Switch phases without asking (unless there's only one candidate).
 - Skip the worktree for "small" changes — the gate applies to everything, including one-line fixes.
-- Create the worktree inside the main checkout — worktrees are always siblings.
+- Fall back to the main checkout if worktree creation fails — it stops and reports instead.
