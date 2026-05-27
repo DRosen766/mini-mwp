@@ -14,6 +14,8 @@ The handoff mechanism between agent stages. Each PR is one stage's output; revie
 git worktree add ../<repo>-wt-<short-slug> -b <branch-name> main
 ```
 
+**Worktrees go in a sibling directory of the main checkout — never nested inside it.** The `../` prefix above is load-bearing, not cosmetic. A worktree placed inside the main repo (e.g. `./worktrees/<slug>/` or `./<slug>/`) confuses every tool that walks the working tree: `git status` from the main checkout sees the nested worktree as an untracked directory, file watchers double-index, and IDE indexers fight over the same files. Symptom this prevents: the main checkout shows phantom "untracked" entries for an unrelated worktree, or a build tool picks up two copies of the same source file.
+
 Then `cd` into the worktree, make the change, commit, push, open the PR from there. After merge, clean up:
 
 ```bash
@@ -43,6 +45,10 @@ Worktrees live as siblings to the main checkout, inside a parent folder. Layout:
 ```
 
 The parent folder is what gets opened in Cowork, so the agent can see all worktrees at once and the cross-project learnings ledger is sibling to all of them.
+
+## Reviewer assignment
+
+**Add `DRosen766` as a reviewer on every PR.** Use `gh pr create --reviewer DRosen766 …` (or the `reviewers` field if creating via API). This is what surfaces the PR in the GitHub "Review requested" inbox and on the mobile app; without it, PRs sit silently until someone happens to browse the repo. Symptom this prevents: a stage finishes, the agent reports "PR opened," and nothing pings the reviewer — the work stalls until the next time the repo is opened manually.
 
 ## Handoff hygiene
 
