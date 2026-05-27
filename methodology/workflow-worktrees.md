@@ -6,7 +6,9 @@ The handoff mechanism between agent stages. Each PR is one stage's output; revie
 
 **Never commit directly to `main`.** For any change — code, migrations, docs, config — open a PR targeting `main`. The only exception is when I explicitly say so in the request (e.g. "commit straight to main", "skip the PR", "push directly"). If a request is ambiguous, default to PR and ask only if blocked.
 
-## The pattern
+## The rule: worktree first, then work
+
+**Open a worktree before writing any code, docs, or config.** The worktree is the first action after picking a task — before reading source files, before planning the change, before touching anything. No changes of any kind land in the main checkout; all work happens inside a worktree. This is not a suggestion or a default — it is a hard gate.
 
 **Default to git worktrees, not in-place branches.** Multiple Claude instances may be working in the repo concurrently, so an in-place `git checkout -b` can stomp on another session's working tree. Use:
 
