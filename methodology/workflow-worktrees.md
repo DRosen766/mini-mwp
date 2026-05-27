@@ -60,14 +60,24 @@ When a worktree's work is ready for the user to test (especially iOS), the agent
 
 For changes that have a fast local validator (compile check, lint, smoke test), run it before declaring the work ready. CI is for catching mistakes that slipped through, not for running the first compile. Symptom this prevents: a 25-minute CI cycle to surface a missing import.
 
-## Docs ship with the change
+## Docs ship with the change — written as if already merged
 
 **Before opening the PR, update every doc the change makes stale — in the same PR.** If a stage changes behavior, config, or a known gotcha, the docs that describe it move with it: `CLAUDE.md` gotchas, `ARCHITECTURE_PLAN.md`, the relevant `docs/plans/000N_*.md`, an ADR if a decision changed. The doc edit is part of the stage, not a follow-up — a stage isn't ready to push until its code compiles *and* its docs match what it now does.
 
-**Why:** In mini-MWP the markdown *is* the context substrate the next agent session reads (`file-roles.md`). A PR that ships code but leaves the docs describing the old behavior hands the next session wrong context, and a separate "update the docs later" PR rarely gets written. Symptom this prevents: an agent reads a `CLAUDE.md` gotcha that the last merge already invalidated and re-introduces the bug the gotcha warned about.
+**Write docs as if the PR is already merged.** Use present tense ("the trigger fires on INSERT"), not future tense ("this PR will add a trigger") or conditional ("once merged, the trigger will fire"). Mark the stage as shipped in the plan doc. Move the STATUS.md item to Done with the ship date. The goal is that the moment the PR merges, every doc in the repo is correct — zero post-merge cleanup commits.
+
+This means:
+- Plan doc stages carry their "shipped" marker in the PR itself, not in a follow-up.
+- `STATUS.md` reflects the post-merge state (item in Done, Activity log entry written).
+- `CLAUDE.md` gotchas describe the new behavior, not the old.
+- If the PR is reverted, the revert also reverts the docs — they stay coupled.
+
+**Why:** In mini-MWP the markdown *is* the context substrate the next agent session reads (`file-roles.md`). A PR that ships code but leaves the docs describing the old behavior hands the next session wrong context, and a separate "update the docs later" PR rarely gets written. The "assume merged" framing eliminates the entire class of post-merge doc cleanup — there is no cleanup because the docs were already correct at submit time. Symptom this prevents: an agent reads a `CLAUDE.md` gotcha that the last merge already invalidated and re-introduces the bug the gotcha warned about. Also prevents: a "docs: update STATUS.md" commit after every merge, which is both noisy and frequently forgotten.
 
 ## Sweep `STATUS.md` before the PR
 
-**Before opening the PR, run the [status-update](../skills/status-update/SKILL.md) protocol on `STATUS.md` end-to-end — not just the line for this stage.** Move this stage's item from Now → Done with the ship date, trim Done past ~15 entries, re-check Next up priorities, demote anything silently completed elsewhere, and confirm Blocked entries are still blocked. Append the dated Activity log line. The status doc is a live ticker (see `file-roles.md`), so it rots faster than any other doc in the repo: stale Now items, items in Done with no date, Blocked items that have been unblocked for weeks.
+**Before opening the PR, run the [status-update](../skills/status-update/SKILL.md) protocol on `STATUS.md` end-to-end — not just the line for this stage.** Write it as if the PR is already merged: move this stage's item from Now → Done with today's date, trim Done past ~15 entries, re-check Next up priorities, demote anything silently completed elsewhere, and confirm Blocked entries are still blocked. Append the dated Activity log line. This is part of the "assume merged" rule above — when the PR lands, STATUS.md is already correct with no follow-up needed.
+
+The status doc is a live ticker (see `file-roles.md`), so it rots faster than any other doc in the repo: stale Now items, items in Done with no date, Blocked items that have been unblocked for weeks.
 
 **Why:** A stale `STATUS.md` makes the *next* session pick the wrong work, or worse, redo work that's already shipped. The sweep-before model is much cheaper than cleanup-after — by the time someone notices the staleness, multiple sessions have already been mis-primed by it. Symptom this prevents: a new session reads "Now: implement X" and starts working on X, not realizing the previous session shipped X two PRs ago but never updated the ticker.
