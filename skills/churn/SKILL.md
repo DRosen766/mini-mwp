@@ -60,7 +60,7 @@ If a churn iteration stops on a permission prompt the user didn't pre-grant, tha
 
 Each invocation:
 
-0. **Sync the main checkout** — pull latest `main`, refresh the `mini-mwp` submodule.
+0. **Sync the main checkout** — pull latest `main`, refresh `mini-mwp`, reclaim any merged-but-lingering worktrees from prior stopped iterations.
 1. **Pick** the next open stage from the current phase's plan.
 2. **Open a worktree** via `EnterWorktree` (hard gate).
 3. **Implement** the stage.
@@ -68,8 +68,8 @@ Each invocation:
 5. **Forward-looking planning pass** — read the plan landscape, update/create plans, file **≥1 new issue per stage shipped** (hard lower bound).
 6. **Open a PR** linking the issue, with `DRosen766` as reviewer.
 7. **Wait** for CI checks.
-8. **Merge** if green; **stop and ask** if red.
-9. **Exit the worktree** and clean up.
+8. **Merge if green; stop and preserve the worktree if not.** Verify `state: MERGED` before proceeding.
+9. **Exit the worktree** and clean up — **only after a confirmed merge**.
 10. **End the iteration cleanly** — print the one-line status, do not start a new pick. `/loop` handles re-firing.
 
 If you discover work that doesn't belong in the current stage (out-of-scope bug, follow-up, missing feature), **invoke the `create-issue` skill** to file and index it — do not expand the current stage.
@@ -87,6 +87,26 @@ git -C "$(git rev-parse --show-toplevel)" rev-parse --abbrev-ref HEAD   # must p
 git pull --ff-only origin main
 git submodule update --init --remote mini-mwp
 ```
+
+### 0a. Reclaim stranded worktrees from prior stopped iterations
+
+After the pull, check whether any worktrees from a previous stopped iteration are still around — typically because the prior iteration's merge was blocked (red CI, permission denial, missing review) and the user has since resolved it manually.
+
+```bash
+git worktree list
+gh pr list --state merged --search "head:<churn-branch-prefix>" --limit 5
+```
+
+For each lingering worktree whose branch has now been merged into `main` (either via the PR list or by checking `git branch --merged main`):
+
+```bash
+git worktree remove ../<lingering-worktree-path>
+git branch -d <lingering-branch>
+```
+
+For lingering worktrees whose branch is **still unmerged**, leave them alone — that work is still the user's to resolve. Note them in the iteration summary so the user sees them.
+
+This recovery clause is the counterpart to step 8's "preserve worktree on merge failure" rule: that rule strands a worktree until the next iteration; step 0a reclaims it once the user has finished what they had to do.
 
 **Rules:**
 
@@ -294,11 +314,28 @@ gh pr merge <pr-number> --squash --delete-branch
 
 Never use `--admin`, never bypass branch protection, never `--no-verify`.
 
-**Red:** stop the loop. Report which check failed, link the failing run, ask the user how to proceed. Do not auto-retry — a flaky test and a real regression look identical from the outside.
+**Verify the merge actually happened** before proceeding to step 9. Check:
 
-**Conflicted:** rebase onto `main`, push, re-watch checks. If the rebase is non-mechanical, stop and ask.
+```bash
+gh pr view <pr-number> --json state,mergedAt
+```
 
-## 9. Exit the worktree and clean up
+`state` must be `MERGED` and `mergedAt` must be non-null. Only then is step 9 (worktree cleanup) safe.
+
+If the merge **did not happen** — for any reason — **do NOT proceed to step 9**. Skip directly to step 10 with a `Stopping:` line. The reasons this branch triggers:
+
+- **Red CI** — stop. Report which check failed, link the failing run. Do not auto-retry — a flaky test and a real regression look identical from the outside.
+- **Conflicted** — try `gh pr merge` after a rebase. Rebase onto `main`, push, re-watch checks. If the rebase is non-mechanical, stop and ask.
+- **Permission denial on `gh pr merge`** — the user hasn't pre-approved `Bash(gh pr merge:*)`. Stop, report the PR URL, and remind them to add it to the allowlist (or merge manually) before re-running `/loop /churn`.
+- **Any other `gh pr merge` failure** — branch protection, required reviews not met, repo settings — stop and report.
+
+**Critical rule when the merge fails:** the worktree and its branch (local + remote) **must be preserved**. The user's only handle on the in-flight work is that worktree and that branch. Cleanup (step 9) would orphan the PR — the local worktree gone, the local branch deleted, and the user holding a remote PR they have to merge by hand against a branch they can no longer easily inspect locally. **Leave it alone.** Do not call `ExitWorktree`, do not `git worktree remove`, do not `git branch -d`. The push has already happened, so the work is durable on the remote — but the user expects the worktree to still be there when they come back.
+
+Cross-reference: step 0 of the *next* iteration will detect and clean up any stranded worktree whose branch has since been merged by the user.
+
+## 9. Exit the worktree and clean up — only after a confirmed merge
+
+**Precondition: step 8 confirmed `state: MERGED`.** If you got here without confirming the merge, go back. Do not run any of the cleanup commands below on an unmerged worktree.
 
 ```
 ExitWorktree({})
@@ -308,7 +345,7 @@ Then from the main checkout:
 
 ```bash
 git worktree list      # confirm the worktree is gone
-git branch -d churn/<slug>   # if it lingers locally
+git branch -d <churn-branch>   # safe -d, not -D — refuses to delete unmerged work as a defense in depth
 ```
 
 If `git worktree list` still shows the worktree, remove it explicitly:
@@ -316,6 +353,8 @@ If `git worktree list` still shows the worktree, remove it explicitly:
 ```bash
 git worktree remove ../<repo>-wt-<slug>
 ```
+
+If `git branch -d` refuses (claims the branch is unmerged), **stop and investigate** — that means git doesn't see the merge yet (likely a stale local main; step 0 of the next iteration should have caught this, but didn't). Do not escalate to `-D`. Report and let the user resolve.
 
 ## 10. End the iteration cleanly
 
@@ -349,6 +388,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 ## Guardrails
 
 - **Sync first, every iteration.** Step 0 is non-optional. Pull `main` fast-forward-only and refresh the `mini-mwp` submodule before reading anything else. Stale ground truth corrupts the planning pass and branches the next worktree off a stale base.
+- **Never clean up an unmerged worktree.** Step 9 runs **only** after step 8 confirms `state: MERGED`. A merge that failed (red CI, permission denial, conflict) leaves the worktree and branch intact — local + remote — so the user can finish the merge. The next iteration's step 0a reclaims it once the user has merged it manually.
 - **Phase-scoped.** Never switch plans without the user — phase handoff is a planning decision.
 - **Route around user-dependent blockers.** A stage blocked on a user decision gets marked `Blocked` in STATUS.md + the plan doc with a one-line note; the iteration picks another unblocked stage in the same phase and continues. Only stop the loop when *every* remaining stage in the phase is blocked. Don't invent answers to user-only decisions.
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
