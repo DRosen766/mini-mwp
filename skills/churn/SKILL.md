@@ -60,10 +60,10 @@ If a churn iteration stops on a permission prompt the user didn't pre-grant, tha
 
 Each invocation:
 
-0. **Sync the main checkout** — pull latest `main`, refresh `mini-mwp`, reclaim any merged-but-lingering worktrees from prior stopped iterations.
-1. **Pick** the next open stage from the current phase's plan.
-2. **Open a worktree** via `EnterWorktree` (hard gate).
-3. **Implement** the stage.
+0. **Sync the main checkout** — pull latest `main`, refresh `mini-mwp`, classify any lingering worktrees (reclaim merged, leave unmerged-with-commits alone, **resume in-progress WIP**).
+1. **Pick** the next open stage from the current phase's plan — *only if* step 0 didn't resume an in-progress worktree.
+2. **Open a worktree** via `EnterWorktree` (hard gate) — *only if* step 0 didn't resume one.
+3. **Implement** the stage (or finish what was already started, on a resumed worktree).
 4. **Update docs + STATUS.md** as if the PR is already merged.
 5. **Forward-looking planning pass** — read the plan landscape, update/create plans, file **≥1 new issue per stage shipped** (hard lower bound).
 6. **Open a PR** linking the issue, with `DRosen766` as reviewer.
@@ -97,16 +97,33 @@ git worktree list
 gh pr list --state merged --search "head:<churn-branch-prefix>" --limit 5
 ```
 
-For each lingering worktree whose branch has now been merged into `main` (either via the PR list or by checking `git branch --merged main`):
+Classify each lingering worktree into one of three states and act accordingly:
+
+**State A — Branch merged into `main`** (`git branch --merged main` lists it, or the PR list shows it merged). Reclaim:
 
 ```bash
 git worktree remove ../<lingering-worktree-path>
 git branch -d <lingering-branch>
 ```
 
-For lingering worktrees whose branch is **still unmerged**, leave them alone — that work is still the user's to resolve. Note them in the iteration summary so the user sees them.
+**State B — Branch has commits but is not yet merged** (open PR awaiting CI, review, or manual merge). Leave it alone — the user is finishing it. Note it in the iteration summary so the user sees it.
 
-This recovery clause is the counterpart to step 8's "preserve worktree on merge failure" rule: that rule strands a worktree until the next iteration; step 0a reclaims it once the user has finished what they had to do.
+**State C — Worktree has uncommitted in-progress writes** (i.e. `git -C <worktree> status --porcelain` is non-empty, OR the branch has zero commits beyond `main` but the working tree has staged/unstaged changes). This is an iteration that was **interrupted mid-implementation** — typically by a permission denial, a tool failure, or the user. The work-in-progress is real and recoverable, but it lives only in the worktree's working tree (not on any remote, possibly not even in a commit).
+
+**Do not pick a new stage.** Resume the interrupted iteration in the existing worktree:
+
+1. `EnterWorktree({ name: "<existing-worktree-slug>" })` to switch the session into it.
+2. Inspect what was already done: `git status`, `git diff`, `git log main..HEAD`. Read the stage's plan entry to know what's still owed.
+3. Resume from where the interruption hit — finish writing the remaining files / running the remaining commands, then proceed through steps 4–9 normally (docs sweep → forward-looking pass → PR → CI → merge → cleanup).
+4. **Skip step 1** (don't re-pick a stage) and **skip step 2** (the worktree already exists; don't try to create a new one). Pick up at step 3 (implement) or wherever the interruption hit.
+
+If you can't tell what was done vs. what's owed (the work is unfamiliar, the stage entry is ambiguous, or the WIP looks inconsistent with the stage), **stop and ask the user** rather than guess and ship something half-baked. Emit `Stopping: found WIP in <worktree> from interrupted iteration; need user direction on how to resume.`
+
+If multiple worktrees are in State C, that's a sign of repeated interruptions. Resume one and surface the others in the iteration summary so the user can triage.
+
+---
+
+These three states are the counterpart to step 8's "preserve worktree on merge failure" rule and the broader "never leave the user holding orphaned work" guarantee. Together they make `/loop /churn` self-recovering across interruptions: the loop fires, looks at what's lying around, finishes what's resumable, reclaims what's done, and only picks a new stage when nothing prior is owed.
 
 **Rules:**
 
@@ -119,13 +136,15 @@ After the sync succeeds, proceed to step 1.
 
 ## 1. Read the methodology and pick the next stage
 
+**Skip this step entirely if step 0a put you into a resumed worktree (State C).** In that case, jump to step 3 — the stage is already picked, the worktree is already open, and re-picking would forget what's already done.
+
 Before the first iteration, read:
 
 - `mini-mwp/methodology/task-pickup.md` — pickup discipline.
 - `mini-mwp/methodology/workflow-worktrees.md` — worktree-first gate, PR workflow, "docs ship with the change."
 - `mini-mwp/methodology/file-roles.md` — what each markdown doc is for.
 
-Then, every iteration:
+Then, every fresh-pick iteration:
 
 ```bash
 cat STATUS.md
@@ -167,7 +186,9 @@ Announce the pick in one line: `Picked: <stage title> (#N if applicable) from do
 
 ## 2. Open a worktree — HARD GATE
 
-**No source reading, no implementation, no edits until the worktree exists.** Use the `EnterWorktree` tool:
+**Skip if step 0a put you into a resumed worktree (State C)** — `EnterWorktree` already happened there; verify with `pwd` and proceed to step 3.
+
+For a fresh-pick iteration: **no source reading, no implementation, no edits until the worktree exists.** Use the `EnterWorktree` tool:
 
 ```
 EnterWorktree({ name: "churn-<short-slug>" })
@@ -389,6 +410,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 
 - **Sync first, every iteration.** Step 0 is non-optional. Pull `main` fast-forward-only and refresh the `mini-mwp` submodule before reading anything else. Stale ground truth corrupts the planning pass and branches the next worktree off a stale base.
 - **Never clean up an unmerged worktree.** Step 9 runs **only** after step 8 confirms `state: MERGED`. A merge that failed (red CI, permission denial, conflict) leaves the worktree and branch intact — local + remote — so the user can finish the merge. The next iteration's step 0a reclaims it once the user has merged it manually.
+- **Resume before pick.** If step 0a finds a worktree with uncommitted in-progress writes (State C — interrupted mid-implementation), the iteration resumes *that* work in *that* worktree rather than picking a new stage. The loop only picks a new stage when nothing prior is owed.
 - **Phase-scoped.** Never switch plans without the user — phase handoff is a planning decision.
 - **Route around user-dependent blockers.** A stage blocked on a user decision gets marked `Blocked` in STATUS.md + the plan doc with a one-line note; the iteration picks another unblocked stage in the same phase and continues. Only stop the loop when *every* remaining stage in the phase is blocked. Don't invent answers to user-only decisions.
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
