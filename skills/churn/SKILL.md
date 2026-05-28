@@ -267,6 +267,14 @@ Per `workflow-worktrees.md` ("Docs ship with the change — written as if alread
 
 The goal: the moment the PR merges, every doc in the repo is already correct.
 
+**The Activity log line is also the iteration's durable checkpoint for context management.** A long `/loop /churn` run accumulates conversation history that gets summarized by auto-compaction — and high-fidelity details (which PR number closed which issue, what the diff actually contained) usually get lost in the summary. The Activity log entry is what survives. Make it specific enough to anchor the next iteration:
+
+```
+2026-05-28 — Shipped Stage 3 of Plan 0010: 10 sub-agent wrappers under .claude/agents/ (PR #103, closed #100). Filed #102 (Stage 4 — CrewAI tools migration).
+```
+
+This is what the next iteration's step 0 read of STATUS.md sees. It does not need to "remember" the prior iteration from conversation — the log entry is the canonical record.
+
 ## 5. Forward-looking planning pass
 
 Closing out the stage's docs is backward-looking — it reconciles the markdown with what just shipped. This step is the **forward-looking** counterpart: before opening the PR, take a deliberate look at the road ahead and leave the plan landscape in better shape than you found it.
@@ -467,6 +475,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 - **Docs ship with the change.** Step 4 is not optional — the methodology's "assume merged" rule is what keeps the markdown substrate trustworthy for the next session.
 - **Forward-looking pass runs every iteration.** Step 5 is not optional. **Hard floor: ≥1 new issue filed per stage shipped — anywhere in the plan landscape, not just the current phase.** Creating new phases is encouraged and is the primary mechanism by which churn keeps forward surface area growing faster than the current phase drains.
 - **One iteration per invocation.** Don't try to loop inside the skill. Pair with `/loop /churn` for continuous operation; auto-compaction between firings keeps context bounded.
+- **Each iteration is semi-stateless.** Conversation memory across iterations is convenience, not truth. Re-read `STATUS.md`, the active plan doc, and `gh issue list` from disk every iteration — never trust remembered fields. Auto-compaction strips high-fidelity details (specific PR numbers, exact issue bodies, diff contents); the Activity log entry written in step 4 is the durable record the next iteration anchors on.
 - **Reviewer always set.** `--reviewer DRosen766` on every PR.
 - **No silent scope expansion.** Out-of-scope work becomes a new issue via `create-issue`.
 - **No force-push to shared branches.** Force-push only your own `churn/*` branches when needed.
