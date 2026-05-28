@@ -33,4 +33,4 @@ When a plan ships its last stage, the plan doc itself is closed out — every st
 
 - `file-roles.md` — defines the `Current phase` field on STATUS.md.
 - `workflow-stages.md` — plans (`docs/plans/000N_*.md`) are the unit a phase is built from.
-- The `cowork-churn` skill is the autonomous counterpart to these rules — it already operates plan-scoped and drains one plan's stages before stopping. This doc is the manual-session equivalent and the authoritative rule set both follow.
+- The `churn` skill is the autonomous counterpart to these rules — it operates plan-scoped and drains one plan's stages before stopping. This doc is the manual-session equivalent and the authoritative rule set both follow.

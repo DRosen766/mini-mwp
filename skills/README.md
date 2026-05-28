@@ -4,6 +4,7 @@ Repo-agnostic skills that embody the mini-mwp methodology. Designed to be consum
 
 ## Available skills
 
+- **`churn/`** — one autonomous iteration of draining the current phase: pick the next stage, implement in a worktree, ship docs + STATUS.md as if already merged, run a forward-looking planning pass (≥1 new issue per stage shipped), open a PR, wait for green checks, merge, clean up. Pair with `/loop /churn` for continuous operation. The autonomous counterpart to `next/`.
 - **`create-issue/`** — file a GitHub issue, index it in the right `docs/plans/` phase doc, and land the doc edit via a worktree+PR.
 - **`next/`** — pick the next task from the current phase and open a worktree for it. Enforces task-pickup discipline and the worktree-first gate.
 - **`status-update/`** — the STATUS.md live-ticker update protocol (see `methodology/file-roles.md`).
