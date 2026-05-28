@@ -1,0 +1,34 @@
+# Agent routing — `<Project>` personas
+
+Mapping of team signals to lead sub-agents, and the sub-agents each lead may delegate to. Read by the `churn`, `next`, and `create-issue` skills to route stage execution per `mini-mwp/methodology/delegation.md`.
+
+Copy this file to `.claude/agents/ROUTING.md` in your project, then edit:
+- Replace `<lead-…>` and `<sub-agent-…>` with your project's actual persona names (must match `.claude/agents/*.md` definitions).
+- Replace the team-signal column with your project's actual team names (whatever appears in plan-doc front-matter or `team:*` issue labels).
+- Designate one persona as the **triage / personal-assistant** role — the fallback when no team signal is derivable.
+
+## Routing table
+
+| Team signal (`team:*`)                          | Lead              | Sub-agents the lead may delegate to       |
+| ----------------------------------------------- | ----------------- | ----------------------------------------- |
+| `<team-name-1>` / `<synonym>` / `<synonym>`     | `<lead-1>`        | `<sub-agent-1a>`, `<sub-agent-1b>`        |
+| `<team-name-2>` / `<synonym>`                   | `<lead-2>`        | `<sub-agent-2a>`, `<sub-agent-2b>`        |
+| `<team-name-3>`                                 | `<lead-3>`        | `<sub-agent-3a>`                          |
+| ambiguous / multi-team / no signal              | `<triage-lead>`   | routes to `<lead-1>` / `<lead-2>` / `<lead-3>` |
+
+## Allocation conventions
+
+- **Team allocation** — `team:<name>` GitHub label, or `team: <name>` front-matter in the plan doc. Routes to the corresponding lead.
+- **Specialist allocation** (optional) — `assignee:<persona>` GitHub label, or `Specialist: <persona>` on the stage entry in the plan doc. The lead delegates to this named specialist rather than choosing one. Does **not** bypass the lead — the lead still receives the brief and signs off.
+
+## Chain rules
+
+- Main agent → lead → (optional) sub-agent. **Chain depth ≤ 2.** Sub-agents do not re-delegate.
+- Main agent retains: stage selection, worktree setup, PR mechanics, STATUS.md updates, forward-looking landscape scan, merge, cleanup, and any work without a team owner.
+- Direct main-agent execution of team-owned stage work is a workflow violation. Call it out and correct.
+
+## Fallback when no signal is derivable
+
+If the plan doc has no `team:` field, the issue has no `team:*` label, and the stage title doesn't clearly map to one team, the skill routes to **`<triage-lead>`** — the personal-assistant role. That persona decides whether to do the work themselves, delegate to a lead, or kick it back to the user as ambiguous.
+
+If the project doesn't have a triage lead designated, the skill falls back to direct main-agent execution.

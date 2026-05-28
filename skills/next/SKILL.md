@@ -67,7 +67,25 @@ This is **not optional**. Do not use `git worktree add` manually — the `EnterW
 
 **Verify you are in the worktree** after calling `EnterWorktree` — run `pwd` and confirm the path contains the worktree slug. If `EnterWorktree` fails, stop and report the error. Do not proceed with work in the main checkout as a fallback.
 
-### 6. Report to the user
+### 6. Hand off to the owning persona (if the project has personas)
+
+Per `mini-mwp/methodology/delegation.md`, the main agent is a router, not the default executor. If the project has `.claude/agents/` and a routing config, hand stage execution to the team's lead before doing implementation work yourself.
+
+Determine the owning team from the plan doc / issue label / stage title (see delegation.md for the full rule), then invoke the lead:
+
+```
+Agent({
+  subagent_type: "<lead-persona-name>",
+  description: "<short — picked-up task>",
+  prompt: <self-contained brief — stage goal, plan-doc path, prior outputs, acceptance criteria, branch name, expected artifacts, specialist allocation if any, constraints>
+})
+```
+
+The lead executes inside the worktree the main agent just opened. Sub-agents may further delegate one level (lead → sub-agent); no chains beyond that. See `delegation.md` for the brief template.
+
+**Fallback:** if the project has no `.claude/agents/` or no team signal can be derived, the main agent does the work directly. Delegation is opt-in per project.
+
+### 7. Report to the user
 
 Print a short summary:
 
@@ -76,9 +94,11 @@ Picked: <task title> (#<issue> if applicable)
 Phase: docs/plans/000N_<phase>.md
 Worktree: <pwd output from step 5>
 Branch: <branch name>
+Owning team: <team or "n/a — direct execution">
+Lead invoked: <lead persona or "n/a">
 ```
 
-Then begin working on the task inside the worktree.
+Then continue — either as the orchestrating main agent (delegated path) or with direct implementation (fallback path).
 
 ---
 

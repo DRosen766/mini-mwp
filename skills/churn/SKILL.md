@@ -63,7 +63,7 @@ Each invocation:
 0. **Sync the main checkout** — pull latest `main`, refresh `mini-mwp`, classify any lingering worktrees (reclaim merged, leave unmerged-with-commits alone, **resume in-progress WIP**).
 1. **Pick** the next open stage from the current phase's plan — *only if* step 0 didn't resume an in-progress worktree. If no phase is active (cold start, or current phase just drained), step **1a** runs first to auto-select the next phase.
 2. **Open a worktree** via `EnterWorktree` (hard gate) — *only if* step 0 didn't resume one.
-3. **Implement** the stage (or finish what was already started, on a resumed worktree).
+3. **Delegate to the owning persona** via `Agent` (or fall back to direct implementation if the project has no personas). On a resumed worktree from step 0a State C, finish what was already started rather than re-delegating.
 4. **Update docs + STATUS.md** as if the PR is already merged.
 5. **Forward-looking planning pass** — read the plan landscape, update/create plans, file **≥1 new issue per stage shipped** (hard lower bound).
 6. **Open a PR** linking the issue, with `DRosen766` as reviewer.
@@ -248,16 +248,83 @@ Verify with `pwd` after the call; the path must be the sibling (`../<repo>-wt-ch
 
 **Why this matters:** a worktree under `.claude/worktrees/` is inside the main checkout's working tree. From the main checkout, `git status` reports the nested worktree's contents as untracked; file watchers and IDE indexers see two copies of the same files; build tools that walk the tree pick up both. The sibling layout is what the rest of the methodology (the `<App>_parent/` folder convention, Cowork's parent-folder mount, the cross-project learnings ledger) is built around.
 
-## 3. Implement the stage
+## 3. Delegate to the owning persona (if the project has personas)
 
-Inside the worktree:
+**Skip if the project has no `.claude/agents/` directory** — fall through to direct implementation in step 3a.
+
+Per `methodology/delegation.md`, the main agent is a **router**, not the default executor. If the project has personas, hand stage execution to the owning lead before doing implementation work.
+
+### 3a. Determine the owning team
+
+Find the owning team using the project's routing config (typically `.claude/agents/ROUTING.md` or equivalent — check that file's mapping):
+
+1. **The plan doc** — front-matter (`team: <name>`) or an owner field in the plan header.
+2. **The GitHub issue** — a `team:*` label.
+3. **Skill judgment** — based on stage title and content. Fall back to the project's designated triage persona when ambiguous (often a personal-assistant role).
+
+Also check for a **specialist allocation** (per `methodology/delegation.md`): an `assignee:<persona>` / `specialist:<persona>` label on the issue, or a `Specialist:` field on the plan's stage entry. If present, pass it through in the brief — the lead delegates to that named specialist rather than choosing one.
+
+### 3b. Invoke the lead with a self-contained brief
+
+```
+Agent({
+  subagent_type: "<lead-persona-name>",
+  description: "Stage <N> of <plan>",
+  prompt: <self-contained brief, see template below>
+})
+```
+
+The brief must be self-contained. The lead is a fresh agent — it hasn't seen the conversation, doesn't know prior stages shipped, doesn't know the conventions. Skimping on the brief is the dominant failure mode (lead produces shallow work, main agent silently redoes it).
+
+**Brief template:**
+
+```
+## Stage goal
+<one sentence — what success looks like>
+
+## Plan doc
+<absolute path to docs/plans/000N_<slug>.md>
+
+## Prior stage outputs
+<what previous stages of this phase shipped, and where they live — without this you can't tell which decisions are settled>
+
+## Acceptance criteria
+- [ ] <crisp checkbox-style criteria from the issue/plan>
+- [ ] ...
+
+## Branch
+<branch name — your commits land here; you're already in the worktree>
+
+## Expected artifacts
+- Files to create: <list>
+- Files to edit: <list>
+- Decisions to document: <list>
+
+## Specialist allocation
+<"Delegate to <specialist>" if the issue named one; otherwise "Lead's choice — handle directly or delegate to a sub-agent as fits.">
+
+## Constraints
+- Project conventions: <CLAUDE.md references>
+- Out of scope: <things explicitly not to touch>
+- Worktree-first: you're already in the worktree at <path>; do not exit it.
+```
+
+### 3c. Lead executes; main agent waits
+
+The lead does the implementation (possibly further delegating one level to a sub-agent — `methodology/delegation.md` caps the chain at lead → sub-agent). When the lead returns, it should provide a summary: files touched, decisions made, follow-ups noticed, any out-of-scope discoveries (which the main agent files as issues in step 5, not the lead).
+
+### 3d. Fallback: direct implementation
+
+If the project has no `.claude/agents/`, no routing config, or no team signal can be derived from the plan/issue/title, fall back to direct main-agent implementation:
 
 - Read the stage's plan entry and any linked issue body in full.
 - Read the relevant `CLAUDE.md` gotchas and project conventions before touching code.
 - Make the change. Stay within the stage's scope.
-- Run the project's local validators (compile / lint / type-check / smoke tests) before declaring the work ready — CI is for catching escapes, not the first compile.
+- Run the project's local validators (compile / lint / type-check / smoke tests) before declaring ready.
 
-**Out-of-scope discoveries:** if you find a bug, follow-up, or missing feature that doesn't belong in this stage, invoke the `create-issue` skill to file it (or note it for filing at the end of the iteration). Do **not** expand the current stage to absorb it.
+**Out-of-scope discoveries** (delegated or direct): if you find a bug, follow-up, or missing feature that doesn't belong in this stage, **do not expand the current stage to absorb it**. Capture it for step 5 (forward-looking pass) to file as a new issue.
+
+**What the main agent retains, even on delegated stages:** worktree setup (step 2), the forward-looking landscape scan (step 5), STATUS.md updates and docs sweep (step 4 — the live ticker is repo-wide state, not team deliverable), PR mechanics (step 6), merge wait + cleanup (steps 7–9). Delegation is for stage execution, not orchestration.
 
 ## 4. Ship docs + STATUS.md as if already merged
 
@@ -387,6 +454,11 @@ Closes #<issue-number>   # omit if the stage has no GH issue
 ## Test plan
 - [ ] <how this was verified locally>
 
+## Execution
+- **Owning team:** <team name from routing config, or "n/a — no team signal">.
+- **Lead:** <lead persona invoked via `Agent`, or "n/a — direct main-agent execution because <reason>">.
+- **Specialist:** <if the lead delegated further, or "n/a">.
+
 ## Forward-looking notes
 - **Scanned this iteration** (proof step 5a ran): plan docs read = [<list>]; architecture doc = <yes/no>; `gh issue list` = <N open>; CLAUDE.md re-read for gotchas = <yes/no>.
 - **Plan changes:** <plans created / updated / re-prioritized / re-shaped, or "no changes warranted because <specific reason from the scan>">.
@@ -506,6 +578,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
 - **Docs ship with the change.** Step 4 is not optional — the methodology's "assume merged" rule is what keeps the markdown substrate trustworthy for the next session.
 - **Forward-looking pass runs every iteration and must be visible.** Step 5 is not optional. **Hard floor: ≥1 new issue filed per stage shipped — anywhere in the plan landscape, not just the current phase.** Creating new phases is encouraged and is the primary mechanism by which churn keeps forward surface area growing faster than the current phase drains. The PR body's `Scanned:` field is the audit trail — if it lists only the current plan doc, the landscape scan didn't actually run. Filing the literal next sequential stage as the only issue is bookkeeping, not a finding; requires an explicit "no other work surfaced because <reason>" justification in the PR body.
+- **Delegate stage execution to the owning persona.** Step 3 hands the implementation work to the team's lead via `Agent({ subagent_type })` when the project has `.claude/agents/`. Main agent retains worktree, PR mechanics, STATUS.md, forward-looking pass, merge, cleanup. Direct main-agent execution of team-owned stage work is a workflow violation. Falls back to direct execution only when no team signal can be derived. See `methodology/delegation.md`.
 - **One iteration per invocation.** Don't try to loop inside the skill. Pair with `/loop /churn` for continuous operation; auto-compaction between firings keeps context bounded.
 - **Each iteration is semi-stateless.** Conversation memory across iterations is convenience, not truth. Re-read `STATUS.md`, the active plan doc, and `gh issue list` from disk every iteration — never trust remembered fields. Auto-compaction strips high-fidelity details (specific PR numbers, exact issue bodies, diff contents); the Activity log entry written in step 4 is the durable record the next iteration anchors on.
 - **Reviewer always set.** `--reviewer DRosen766` on every PR.

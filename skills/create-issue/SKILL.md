@@ -90,15 +90,32 @@ Follow the project's worktree naming convention if one exists (check `CLAUDE.md`
 
 If the phase has a **Sequencing** section, only add a stage entry if the new issue is large enough to be its own stage.
 
-### 4. File the GitHub issue
+### 4. Determine allocation (if the project has personas)
+
+If the project has `.claude/agents/` and a routing config (per `mini-mwp/methodology/delegation.md`), pick the **team** that owns the work and, when possible, the **specialist** within that team who should do it. Both are signals the `churn` / `next` skills read when later picking the issue up.
+
+- **Team** — derive from the plan doc's `team:` field or from the issue's domain (chip / tooling / business / legal / docs / infra / etc.) using the project's routing config.
+- **Specialist** — optional. Name a specific sub-agent within the team if one is the obvious owner (e.g., the team's expert on this subsystem, or the persona who shipped the prior stage). Leave blank if the lead's choice is fine.
+
+Skip both if the project has no personas; falls back to direct main-agent execution when the issue is picked up.
+
+**Draft the issue body through the owning lead, not the main agent's generic voice.** A team-owned issue should reflect the persona's lens — what *they* think the scope, repro, and acceptance look like — not a flattened summary from the router. Invoke the lead via `Agent({ subagent_type: <lead> })` with a short brief asking for an issue body in their voice. The main agent files the issue using the lead's returned text.
+
+If the issue is repo-hygiene, skill plumbing, or otherwise has no clear team owner, the main agent drafts directly.
+
+### 5. File the GitHub issue
 
 ```bash
 gh issue create \
   --title "<concise title>" \
-  --label <bug|enhancement|future-work> \
+  --label <bug|enhancement|future-work>,team:<team>,assignee:<specialist> \   # team and assignee labels optional, only if allocation was set in step 4
   --body "$(cat <<'EOF'
 ## Summary
-<1-2 sentences>
+<1-2 sentences — in the owning lead's voice if a team was allocated>
+
+## Allocation                # (only if the project has personas)
+- **Team:** <team>
+- **Specialist:** <persona, or "lead's choice">
 
 ## Repro          # (bugs only)
 1. ...
@@ -123,7 +140,7 @@ EOF
 
 Capture the URL it prints; the trailing path segment is the issue number.
 
-### 5. Replace `#TBD` with the real issue number
+### 6. Replace `#TBD` with the real issue number
 
 In the plan doc:
 ```
@@ -132,7 +149,7 @@ In the plan doc:
 
 Use the Edit tool, not sed, so the change is reviewable.
 
-### 6. Commit, push, create PR, and merge
+### 7. Commit, push, create PR, and merge
 
 ```bash
 git add docs/plans/
@@ -165,7 +182,7 @@ gh pr merge <PR#> --squash --delete-branch
 
 If a check is red on a pure docs change, investigate before merging — never bypass with `--admin` unless the user explicitly asks. If checks hang or fail for infrastructure reasons, report the status and ask the user how to proceed.
 
-### 7. Clean up
+### 8. Clean up
 
 ```bash
 git worktree remove ../<worktree-dir>   # only if it was spawned by this skill
@@ -173,7 +190,7 @@ git worktree remove ../<worktree-dir>   # only if it was spawned by this skill
 
 Reused worktrees stay put.
 
-### 8. Update STATUS.md
+### 9. Update STATUS.md
 
 If the project has a `STATUS.md` and the issue is going on the active queue, append a one-liner to the Activity log (see the `status-update` skill). Otherwise skip — back-burner phases don't need an activity log entry just for filing.
 
@@ -184,5 +201,5 @@ If the project has a `STATUS.md` and the issue is going on the active queue, app
 - Implement the issue. That's a separate worktree+PR.
 - Triage existing issues — see `churn` for that.
 - File issues that belong in another repo's tracker.
-- Mix doc-index commits with feature code (see step 6 caveat).
+- Mix doc-index commits with feature code (see step 7 caveat).
 - Exit without merging the PR (unless blocked by a failing check that needs user input).
