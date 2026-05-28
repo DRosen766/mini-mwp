@@ -47,7 +47,7 @@ Churn runs a fixed set of tool calls. To avoid every iteration stalling on a per
 
 - `Bash(gh issue list:*)`, `Bash(gh issue create:*)`, `Bash(gh issue view:*)`
 - `Bash(gh pr create:*)`, `Bash(gh pr checks:*)`, `Bash(gh pr merge:*)`, `Bash(gh pr view:*)`
-- `Bash(git worktree list:*)`, `Bash(git worktree remove:*)`, `Bash(git branch -d:*)`, `Bash(git push:*)`, `Bash(git add:*)`, `Bash(git commit:*)`
+- `Bash(git worktree add:*)`, `Bash(git worktree list:*)`, `Bash(git worktree remove:*)`, `Bash(git branch -d:*)`, `Bash(git push:*)`, `Bash(git add:*)`, `Bash(git commit:*)`
 - `Bash(git pull --ff-only:*)`, `Bash(git submodule update:*)`, `Bash(git rev-parse:*)` — for step 0's sync.
 - `Bash(cat:*)`, `Bash(ls:*)`
 - `EnterWorktree`, `ExitWorktree`
@@ -112,7 +112,7 @@ git branch -d <lingering-branch>
 
 **Do not pick a new stage.** Resume the interrupted iteration in the existing worktree:
 
-1. `EnterWorktree({ name: "<existing-worktree-slug>" })` to switch the session into it.
+1. `EnterWorktree({ path: "<absolute path from git worktree list>" })` to switch the session into the existing worktree. Use `path`, not `name` — `name` would try to create a new worktree.
 2. Inspect what was already done: `git status`, `git diff`, `git log main..HEAD`. Read the stage's plan entry to know what's still owed.
 3. Resume from where the interruption hit — finish writing the remaining files / running the remaining commands, then proceed through steps 4–9 normally (docs sweep → forward-looking pass → PR → CI → merge → cleanup).
 4. **Skip step 1** (don't re-pick a stage) and **skip step 2** (the worktree already exists; don't try to create a new one). Pick up at step 3 (implement) or wherever the interruption hit.
@@ -186,15 +186,35 @@ Announce the pick in one line: `Picked: <stage title> (#N if applicable) from do
 
 ## 2. Open a worktree — HARD GATE
 
-**Skip if step 0a put you into a resumed worktree (State C)** — `EnterWorktree` already happened there; verify with `pwd` and proceed to step 3.
+**Skip if step 0a put you into a resumed worktree (State C)** — the session is already inside it; verify with `pwd` and proceed to step 3.
 
-For a fresh-pick iteration: **no source reading, no implementation, no edits until the worktree exists.** Use the `EnterWorktree` tool:
+For a fresh-pick iteration: **no source reading, no implementation, no edits until the worktree exists.**
+
+The methodology (`mini-mwp/methodology/workflow-worktrees.md`) requires worktrees to live as **siblings of the main checkout**, never nested inside it. `EnterWorktree({ name })` creates worktrees in `.claude/worktrees/` (nested) — that violates the convention. The correct pattern is two steps: create the worktree at the sibling path with `git worktree add`, then `EnterWorktree({ path })` to switch the session into it.
+
+```bash
+# Compute paths
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_NAME="$(basename "$REPO_ROOT")"
+SLUG="churn-<short-kebab-slug>"
+WT_PATH="$(dirname "$REPO_ROOT")/${REPO_NAME}-wt-${SLUG}"
+BRANCH="worktree-${SLUG}"
+
+# Create the worktree as a sibling, branching off freshly-pulled main
+git worktree add "$WT_PATH" -b "$BRANCH" main
+```
+
+Then switch the session in:
 
 ```
-EnterWorktree({ name: "churn-<short-slug>" })
+EnterWorktree({ path: "<absolute path printed by `git worktree list | tail -1`>" })
 ```
 
-Do not use `git worktree add` manually — `EnterWorktree` is what actually switches the session's working directory. Verify with `pwd` after the call; the path must contain the slug. If `EnterWorktree` fails, stop the loop and report — do not fall back to the main checkout.
+Pass the **path exactly as `git worktree list` reports it** — `EnterWorktree` validates the path against that list and rejects unregistered paths.
+
+Verify with `pwd` after the call; the path must be the sibling (`../<repo>-wt-churn-<slug>` from the main checkout's perspective, never `.claude/worktrees/...`). If either `git worktree add` or `EnterWorktree` fails, stop the loop and report — do not fall back to the main checkout, and do not fall back to `EnterWorktree({ name })` (that would nest the worktree under `.claude/worktrees/`, violating the methodology).
+
+**Why this matters:** a worktree under `.claude/worktrees/` is inside the main checkout's working tree. From the main checkout, `git status` reports the nested worktree's contents as untracked; file watchers and IDE indexers see two copies of the same files; build tools that walk the tree pick up both. The sibling layout is what the rest of the methodology (the `<App>_parent/` folder convention, Cowork's parent-folder mount, the cross-project learnings ledger) is built around.
 
 ## 3. Implement the stage
 
@@ -358,22 +378,21 @@ Cross-reference: step 0 of the *next* iteration will detect and clean up any str
 
 **Precondition: step 8 confirmed `state: MERGED`.** If you got here without confirming the merge, go back. Do not run any of the cleanup commands below on an unmerged worktree.
 
+The worktree was entered via `EnterWorktree({ path })`, which means `ExitWorktree` will **not** auto-remove it (per the tool's own rules — only worktrees created via `name` are auto-managed). Use `action: "keep"` to return to the main checkout, then remove the worktree and branch explicitly:
+
 ```
-ExitWorktree({})
+ExitWorktree({ action: "keep" })
 ```
 
 Then from the main checkout:
 
 ```bash
-git worktree list      # confirm the worktree is gone
-git branch -d <churn-branch>   # safe -d, not -D — refuses to delete unmerged work as a defense in depth
+git worktree remove "$WT_PATH"                  # the sibling path created in step 2
+git branch -d "$BRANCH"                          # safe -d, not -D — refuses to delete unmerged work as defense in depth
+git worktree list                                # confirm the worktree is gone
 ```
 
-If `git worktree list` still shows the worktree, remove it explicitly:
-
-```bash
-git worktree remove ../<repo>-wt-<slug>
-```
+If `git branch -d` refuses (claims the branch is unmerged), **stop and investigate** — that means git doesn't see the merge yet (likely a stale local main; step 0 of the next iteration should have caught this, but didn't). Do not escalate to `-D`. Report and let the user resolve.
 
 If `git branch -d` refuses (claims the branch is unmerged), **stop and investigate** — that means git doesn't see the merge yet (likely a stale local main; step 0 of the next iteration should have caught this, but didn't). Do not escalate to `-D`. Report and let the user resolve.
 
@@ -411,6 +430,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 - **Sync first, every iteration.** Step 0 is non-optional. Pull `main` fast-forward-only and refresh the `mini-mwp` submodule before reading anything else. Stale ground truth corrupts the planning pass and branches the next worktree off a stale base.
 - **Never clean up an unmerged worktree.** Step 9 runs **only** after step 8 confirms `state: MERGED`. A merge that failed (red CI, permission denial, conflict) leaves the worktree and branch intact — local + remote — so the user can finish the merge. The next iteration's step 0a reclaims it once the user has merged it manually.
 - **Resume before pick.** If step 0a finds a worktree with uncommitted in-progress writes (State C — interrupted mid-implementation), the iteration resumes *that* work in *that* worktree rather than picking a new stage. The loop only picks a new stage when nothing prior is owed.
+- **Worktrees are siblings, not nested.** Step 2 creates worktrees at `../<repo>-wt-churn-<slug>/` via `git worktree add` then enters via `EnterWorktree({ path })`. Never `EnterWorktree({ name })` — that nests under `.claude/worktrees/` and violates `methodology/workflow-worktrees.md`.
 - **Phase-scoped.** Never switch plans without the user — phase handoff is a planning decision.
 - **Route around user-dependent blockers.** A stage blocked on a user decision gets marked `Blocked` in STATUS.md + the plan doc with a one-line note; the iteration picks another unblocked stage in the same phase and continues. Only stop the loop when *every* remaining stage in the phase is blocked. Don't invent answers to user-only decisions.
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
