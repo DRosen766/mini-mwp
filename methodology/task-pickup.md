@@ -15,7 +15,12 @@ How the agent chooses what to work on at the start of a session. The rule set ke
 1. **Hard blocker.** A stage in the current phase is blocked on something the agent can't resolve in-session — waiting on a user decision, an external dependency, an unanswered design question. The blocked stage moves to **Blocked** in STATUS.md with the reason recorded, and the picker prefers another open stage *in the same plan* before considering a switch. Switching plans is the last resort, not the first move.
 2. **Explicit user override.** The user says "work on X" or "switch phases." Follow it. Don't relitigate.
 
-**Phase handoff is a two-step pickup.** When the last stage of the current phase ships, the next session's pickup is a two-step decision: (1) choose the next plan and update **Current phase** to point at it, then (2) pick the first stage from that plan. Step 1 is a planning call, not an execution one — if multiple candidate plans exist and the priority isn't obvious, stop and ask rather than guess. After the choice is made, work proceeds inside the new plan under the same drain-before-switching rule.
+**Phase handoff is a two-step pickup.** When the last stage of the current phase ships, the pickup is a two-step decision: (1) choose the next plan and update **Current phase** to point at it, then (2) pick the first stage from that plan. The selection rule depends on the session type:
+
+- **Manual sessions (`/next`)** — step 1 is a planning call. If multiple candidate plans exist and the priority isn't obvious, stop and ask the user rather than guess. The user owns prioritization.
+- **Autonomous loops (`/loop /churn`)** — the loop selects the next phase itself using the heuristics in `skills/churn/SKILL.md` step 1a (disposition pointer in the just-drained plan, single viable candidate, sequence-number tiebreaker). The loop only stops on a *genuinely* ambiguous handoff: multiple equally-viable candidates with no priority signal, or every candidate blocked, or no plans with open stages. Obvious handoffs proceed without user input — that's the autonomous part.
+
+After the choice is made, work proceeds inside the new plan under the same drain-before-switching rule.
 
 **Open a worktree immediately after picking.** Once the task is chosen, the very next action is `git worktree add` — before reading source files, before planning the implementation, before touching anything. No work happens in the main checkout. See `workflow-worktrees.md` for the pattern and rationale.
 
