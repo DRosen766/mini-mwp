@@ -306,6 +306,10 @@ Then read enough of the other plan docs (or their headers) to know what phases e
 - Any `CLAUDE.md` gotchas you touched or that touched what you just shipped.
 - The GitHub issue tracker (`gh issue list --state open --limit 50`) to avoid filing duplicates.
 
+**These reads must be visible in the PR body** (step 6's `## Forward-looking notes` section now includes a `Scanned:` field). If a future reader can't tell from the PR what you looked at, the audit can't tell whether step 5a actually ran — and in practice when 5a is skipped, the iteration shortcuts to "file Stage N+1 of the current plan" and pretends that's a forward-looking finding.
+
+**Minimum scan to claim 5a ran:** `ls docs/plans/`, plus reading at least the headers (Scope + Stages) of every other open plan doc, plus `gh issue list --state open --limit 30`, plus the architecture doc. Anything less and the landscape scan didn't happen.
+
 The shipped stage almost always surfaces three categories of forward-looking work — actively look for them:
 
 1. **Follow-ups the stage exposed.** Out-of-scope bugs you noticed, half-finished edges, "TODO: revisit after X ships" items that X has now shipped.
@@ -348,6 +352,22 @@ Don't pad with junk to hit the floor. Each filed issue should be real work you'd
 
 The lower bound is one. The expected number is often more. Don't pad with junk issues to hit the floor — pad with junk, and the issue tracker becomes useless. Issues filed here should each be something you'd be willing to pick up in a future churn iteration.
 
+### 5d. "Next sequential stage" is not, by itself, a forward-looking finding
+
+A common failure mode: the iteration ships Stage N of the current plan, files an issue for Stage N+1 of the same plan (which was already enumerated in the plan doc before the iteration started), and calls that a forward-looking pass. **It isn't.** Stage N+1 was already on the plan — filing its issue is a bookkeeping step, not a finding.
+
+A forward-looking *finding* is something the iteration **discovered** that wasn't already in the plan landscape:
+
+- A bug or follow-up the shipped change exposed that wasn't in any plan.
+- A neighboring phase that's now unblocked or now obsolete.
+- A new phase that should exist because the shipped change opened an avenue that didn't have one.
+- A structural change (split, merge, retire, re-prioritize) the landscape now warrants.
+- An issue in another phase that the shipped change touched.
+
+**Rule:** if the only new issue filed this iteration is the literal next sequential stage of the current plan, **the PR body must include an explicit "no other forward-looking work surfaced because <reason>" note**. The reason must be specific — "I scanned plans X, Y, Z and the architecture doc; no follow-ups arose because <…>". A generic "nothing came up" doesn't satisfy this.
+
+If you find yourself writing the no-other-work note iteration after iteration, the loop is regressing to mechanical next-stage filing. Stop and report — that pattern means either the plan landscape is genuinely complete (rare, worth confirming with the user), or the landscape scan is being skipped (likely, worth re-running with more care).
+
 ## 6. Open the PR
 
 From the worktree branch:
@@ -368,9 +388,11 @@ Closes #<issue-number>   # omit if the stage has no GH issue
 - [ ] <how this was verified locally>
 
 ## Forward-looking notes
-- Plan changes: <plans created / updated / re-prioritized, or "no changes — <why>">
-- New phases created: <000N_<slug>.md, …, or "none">
-- New issues filed: #<N> (→ <plan doc>), #<N+1> (→ <plan doc>), … (≥1 required per step 5c, anywhere in the landscape)
+- **Scanned this iteration** (proof step 5a ran): plan docs read = [<list>]; architecture doc = <yes/no>; `gh issue list` = <N open>; CLAUDE.md re-read for gotchas = <yes/no>.
+- **Plan changes:** <plans created / updated / re-prioritized / re-shaped, or "no changes warranted because <specific reason from the scan>">.
+- **New phases created:** <000N_<slug>.md, …, or "none">.
+- **New issues filed:** #<N> (→ <plan doc>), #<N+1> (→ <plan doc>), … (≥1 required per step 5c, anywhere in the landscape).
+- **Next-sequential-only?** If the only new issue is the literal next stage of the current plan, fill this in: "No other forward-looking work surfaced because <specific reason from the scan>." Otherwise: "n/a — this iteration found <category> work beyond next-sequential."
 
 ## Follow-ups
 - #<N> — <new issue from out-of-scope discovery mid-implementation, if separate from the forward-looking batch>
@@ -483,7 +505,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 - **Route around user-dependent blockers.** A stage blocked on a user decision gets marked `Blocked` in STATUS.md + the plan doc with a one-line note; the iteration picks another unblocked stage in the same phase and continues. Only stop the loop when *every* remaining stage in the phase is blocked. Don't invent answers to user-only decisions.
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
 - **Docs ship with the change.** Step 4 is not optional — the methodology's "assume merged" rule is what keeps the markdown substrate trustworthy for the next session.
-- **Forward-looking pass runs every iteration.** Step 5 is not optional. **Hard floor: ≥1 new issue filed per stage shipped — anywhere in the plan landscape, not just the current phase.** Creating new phases is encouraged and is the primary mechanism by which churn keeps forward surface area growing faster than the current phase drains.
+- **Forward-looking pass runs every iteration and must be visible.** Step 5 is not optional. **Hard floor: ≥1 new issue filed per stage shipped — anywhere in the plan landscape, not just the current phase.** Creating new phases is encouraged and is the primary mechanism by which churn keeps forward surface area growing faster than the current phase drains. The PR body's `Scanned:` field is the audit trail — if it lists only the current plan doc, the landscape scan didn't actually run. Filing the literal next sequential stage as the only issue is bookkeeping, not a finding; requires an explicit "no other work surfaced because <reason>" justification in the PR body.
 - **One iteration per invocation.** Don't try to loop inside the skill. Pair with `/loop /churn` for continuous operation; auto-compaction between firings keeps context bounded.
 - **Each iteration is semi-stateless.** Conversation memory across iterations is convenience, not truth. Re-read `STATUS.md`, the active plan doc, and `gh issue list` from disk every iteration — never trust remembered fields. Auto-compaction strips high-fidelity details (specific PR numbers, exact issue bodies, diff contents); the Activity log entry written in step 4 is the durable record the next iteration anchors on.
 - **Reviewer always set.** `--reviewer DRosen766` on every PR.
