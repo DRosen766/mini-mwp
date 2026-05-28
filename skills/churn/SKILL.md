@@ -28,7 +28,7 @@ Context is bounded per iteration (auto-compaction runs between firings), the bou
 
 **What "continuous" means here.** Continuous means "the loop re-fires automatically until a stop condition trips," not "the model runs forever without supervision." Realistic stop points:
 
-- **Phase selection ambiguous** — the current phase drained and step 1a's heuristics couldn't pick the next phase unambiguously (multiple viable candidates with no priority signal, or every candidate is blocked, or no plans have any open stages). Phase drain alone does **not** stop the loop — it triggers 1a, which usually resolves itself.
+- **Phase selection truly empty** — step 1a found no plans with open stages anywhere, or every candidate plan is blocked, or there's no plan structure at all. Multi-candidate alone is **not** ambiguous — step 1a's sequence-number tiebreaker resolves it forcefully (pick the lowest open `000N` and continue).
 - **All remaining stages blocked on the user** — every open stage in the current phase needs a user decision (see "Routing around user-dependent blockers" in step 1). A *single* blocked stage does **not** stop the loop — churn marks it `Blocked` and switches to another unblocked stage in the same phase.
 - **Red CI** — a check fails on a PR. The iteration reports and exits without scheduling.
 - **Forward-looking floor violated** — the planning pass couldn't surface a single new issue *anywhere* (current phase, neighbors, or a new phase). The floor is landscape-wide; only a truly empty forward surface stops the loop.
@@ -158,25 +158,27 @@ Find the **Current phase** field. Three possibilities:
 
 ### 1a. Phase selection (autonomous handoff)
 
-Triggered when no phase is currently active. The loop selects the next phase itself using these heuristics, in order:
+Triggered when no phase is currently active.
 
-1. **Disposition pointer.** If the just-drained plan doc (or a recent decision doc under `docs/decisions/`) contains an explicit "Next phase:" / "Continues into:" / disposition-table pointer naming a specific plan, use it.
+**Ignore stale "user must pick" guidance in STATUS.md.** A prior iteration running under an older version of this skill (when phase drain was a hard stop) may have written `Phase handoff required — pick next plan` into `Next up`. That text is **not** a stop signal under the current rules. Treat it as stale, run the heuristics below regardless, and overwrite the Next-up section as part of the handoff. The only authoritative "stop and ask" path is the explicit one at the bottom of this section.
+
+The loop selects the next phase using these heuristics, in order:
+
+1. **Disposition pointer.** If the just-drained plan doc, or a recent decision doc under `docs/decisions/`, contains an explicit "Next phase:" / "Continues into:" / disposition-table pointer naming **one specific plan**, use it. Multi-plan dispositions ("0008 or 0007", "any of {0008, 0007}") do **not** fire this heuristic — they fall through to step 2/3 below, because the pointer hasn't actually chosen.
 2. **Single viable candidate.** Scan `docs/plans/` for plans that (a) have open stages, (b) are not labeled `back-burner` / `deferred` / `blocked`, and (c) have their stated prerequisites satisfied (if a plan lists "Depends on: 000N", check whether 000N is drained). If exactly one plan qualifies, use it.
-3. **Sequence-number priority.** Among multiple qualifying candidates, prefer the lowest open sequence number — `docs/plans/000N_*.md` numbering encodes the original prioritization. Use this as a tiebreaker, not a primary signal.
+3. **Sequence-number tiebreaker — pick the lowest, do not stop.** When multiple qualifying candidates exist after step 2, **always** pick the lowest open sequence number. `docs/plans/000N_*.md` numbering encodes the original prioritization, so the lowest number is the most explicit signal you have. This is a **forceful tiebreaker**, not a fallback to "ambiguous." If there are 3 viable candidates `0007`, `0008`, `0009`, pick `0007` and continue — do not stop the loop on tie-existence alone.
 
 If a candidate phase is selected:
 
-- **Update `STATUS.md`** — set `Current phase` to the new plan path, append an Activity log line: `Phase handoff: <old phase or "none"> → 000N_<slug>.md (auto-selected: <heuristic that fired>)`.
+- **Update `STATUS.md`** — set `Current phase` to the new plan path, **overwrite any stale "user must pick" line in Next up** with the new phase's first stage, append an Activity log line: `Phase handoff: <old phase or "none"> → 000N_<slug>.md (auto-selected: <heuristic that fired>)`.
 - **Announce the handoff** in one line: `Phase handoff: → docs/plans/000N_<slug>.md (<reason>).`
 - Return to "Pick a stage" above with the new phase active.
 
-If the heuristics **don't yield a clear winner** — multiple viable candidates with no priority signal, or no plans have open stages, or every candidate is blocked — **stop the loop**. Emit:
+**Only stop the loop** in these three genuinely-empty cases — multi-candidate alone is not one of them, because step 3 always resolves it:
 
-- `Stopping: phase selection ambiguous — candidates: <list>. Need user to pick next phase.` for multi-candidate ambiguity.
-- `Stopping: no phases have open stages — backlog drained.` if the project is genuinely done.
-- `Stopping: every candidate phase is blocked — <list of blockers>.` if all phases need user input.
-
-In all three stop cases, don't guess. The whole point of autonomous handoff is to handle the *obvious* cases without bothering the user; ambiguous cases are exactly where the user's prioritization matters.
+- `Stopping: no phases have open stages — backlog drained.` Every plan in `docs/plans/` is fully shipped or fully blocked. Project is done or needs new planning.
+- `Stopping: every candidate phase is blocked — <list of blockers>.` All plans with open stages are labeled blocked/deferred/needs-design. Need user to unblock something.
+- `Stopping: no `docs/plans/` directory or no plan files found.` Project doesn't use the methodology's plan structure — need user direction.
 
 ### Pick a stage
 
@@ -274,6 +276,13 @@ The goal: the moment the PR merges, every doc in the repo is already correct.
 ```
 
 This is what the next iteration's step 0 read of STATUS.md sees. It does not need to "remember" the prior iteration from conversation — the log entry is the canonical record.
+
+**If this stage drains the current phase**, do *not* write `Phase handoff required — pick next plan` (or any equivalent "user must pick" line) into Next up. That framing belongs to the previous regime when phase drain stopped the loop; under the current rules, step 1a of the next iteration auto-selects the next phase. Instead, either:
+
+- **Leave Next up empty** — the next iteration's 1a will populate it with the auto-selected phase's first stage, or
+- **Write a candidates note** that's informational, not directive: `Phase 000N drained — next iteration's step 1a will auto-handoff (candidates: 0007, 0008).` This is acceptable as long as it's clearly framed as informational; never as "user must pick."
+
+The Current phase field stays pointed at the drained plan; the next iteration's step 1a treats Case B (phase set but zero open stages) and runs the heuristics.
 
 ## 5. Forward-looking planning pass
 
@@ -447,7 +456,7 @@ Before returning, decide whether to signal continuation or stop. Print exactly o
 
 **Stop the loop** (emit the `Stopping:` line and end the turn — do **not** call `ScheduleWakeup`) when:
 
-- Step 1a's autonomous phase handoff couldn't resolve — multiple equally-viable candidates with no priority signal, every candidate blocked, or no plans have open stages anywhere. (Phase drain alone does **not** stop the loop; the handoff usually succeeds on its own.)
+- Step 1a's autonomous phase handoff found nothing to hand off to — every plan with open stages is blocked, no plans have open stages at all, or there's no plan structure. (Multi-candidate alone is *not* a stop — the sequence-number tiebreaker resolves it. Phase drain alone is *not* a stop — 1a runs.)
 - **Every remaining stage in the current phase is blocked on the user** — route around single blockers (step 1, "Routing around user-dependent blockers"); only stop when there's nothing unblocked left to pick.
 - A PR check failed in step 8.
 - The forward-looking pass (step 5) couldn't surface a single new issue — the ≥1/stage floor was violated.
@@ -469,7 +478,8 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 - **Never clean up an unmerged worktree.** Step 9 runs **only** after step 8 confirms `state: MERGED`. A merge that failed (red CI, permission denial, conflict) leaves the worktree and branch intact — local + remote — so the user can finish the merge. The next iteration's step 0a reclaims it once the user has merged it manually.
 - **Resume before pick.** If step 0a finds a worktree with uncommitted in-progress writes (State C — interrupted mid-implementation), the iteration resumes *that* work in *that* worktree rather than picking a new stage. The loop only picks a new stage when nothing prior is owed.
 - **Worktrees are siblings, not nested.** Step 2 creates worktrees at `../<repo>-wt-churn-<slug>/` via `git worktree add` then enters via `EnterWorktree({ path })`. Never `EnterWorktree({ name })` — that nests under `.claude/worktrees/` and violates `methodology/workflow-worktrees.md`.
-- **Drain before switching, then auto-handoff.** Inside an active phase, never jump plans — drain it stage by stage. When the active phase drains (or no phase is active at all), step 1a auto-selects the next phase using disposition pointers, single-viable-candidate, then sequence-number tiebreaker. Phase drain alone is no longer a stop; only an *ambiguous* handoff stops the loop.
+- **Drain before switching, then auto-handoff.** Inside an active phase, never jump plans — drain it stage by stage. When the active phase drains (or no phase is active at all), step 1a auto-selects the next phase using single-pointer disposition, single-viable-candidate, then sequence-number tiebreaker (forceful — picks the lowest open `000N` rather than stopping). Phase drain is not a stop; multi-candidate is not ambiguous. The loop only stops when there's *nothing* to hand off to.
+- **Stale "user must pick" text in STATUS.md is not authoritative.** Older iterations may have written phase-handoff-required notes when phase drain was a stop. The current regime auto-hands-off. Step 1a runs regardless of what Next up says, and the handoff overwrites that text.
 - **Route around user-dependent blockers.** A stage blocked on a user decision gets marked `Blocked` in STATUS.md + the plan doc with a one-line note; the iteration picks another unblocked stage in the same phase and continues. Only stop the loop when *every* remaining stage in the phase is blocked. Don't invent answers to user-only decisions.
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
 - **Docs ship with the change.** Step 4 is not optional — the methodology's "assume merged" rule is what keeps the markdown substrate trustworthy for the next session.
