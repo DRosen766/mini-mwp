@@ -34,6 +34,7 @@ Context is bounded per iteration (auto-compaction runs between firings), the bou
 - **Forward-looking floor violated** — the planning pass couldn't surface a single new issue *anywhere* (current phase, neighbors, or a new phase). The floor is landscape-wide; only a truly empty forward surface stops the loop.
 - **Sensitive surface** — every remaining stage touches auth/billing/migrations/secrets without prior authorization.
 - **Permission prompt** — a tool call requires user approval that wasn't pre-granted (see "Pre-approving permissions" below).
+- **Sync failure** — step 0's `git pull --ff-only` or submodule update failed (network error, local `main` diverged, not on `main`). Don't proceed on stale state.
 - **User interrupts.**
 
 So a realistic overnight run is "N iterations until one of the above fires," not "infinite." That's the design — the stops are features, not bugs.
@@ -47,6 +48,7 @@ Churn runs a fixed set of tool calls. To avoid every iteration stalling on a per
 - `Bash(gh issue list:*)`, `Bash(gh issue create:*)`, `Bash(gh issue view:*)`
 - `Bash(gh pr create:*)`, `Bash(gh pr checks:*)`, `Bash(gh pr merge:*)`, `Bash(gh pr view:*)`
 - `Bash(git worktree list:*)`, `Bash(git worktree remove:*)`, `Bash(git branch -d:*)`, `Bash(git push:*)`, `Bash(git add:*)`, `Bash(git commit:*)`
+- `Bash(git pull --ff-only:*)`, `Bash(git submodule update:*)`, `Bash(git rev-parse:*)` — for step 0's sync.
 - `Bash(cat:*)`, `Bash(ls:*)`
 - `EnterWorktree`, `ExitWorktree`
 
@@ -58,6 +60,7 @@ If a churn iteration stops on a permission prompt the user didn't pre-grant, tha
 
 Each invocation:
 
+0. **Sync the main checkout** — pull latest `main`, refresh the `mini-mwp` submodule.
 1. **Pick** the next open stage from the current phase's plan.
 2. **Open a worktree** via `EnterWorktree` (hard gate).
 3. **Implement** the stage.
@@ -72,6 +75,27 @@ Each invocation:
 If you discover work that doesn't belong in the current stage (out-of-scope bug, follow-up, missing feature), **invoke the `create-issue` skill** to file and index it — do not expand the current stage.
 
 ---
+
+## 0. Sync the main checkout
+
+**Before reading anything else, refresh local state.** A long `/loop /churn` run can otherwise drift behind merges that landed on `main` (your own from a previous iteration, or any concurrent work) and behind `mini-mwp` updates that ship new skill versions or methodology refinements. Every iteration must start from current ground truth — otherwise the planning pass reads stale plan docs and the worktree branches off a stale base.
+
+Run from the main checkout (you should be there at the start of every iteration — `EnterWorktree` happens in step 2):
+
+```bash
+git -C "$(git rev-parse --show-toplevel)" rev-parse --abbrev-ref HEAD   # must print: main
+git pull --ff-only origin main
+git submodule update --init --remote mini-mwp
+```
+
+**Rules:**
+
+- **Fast-forward only.** `--ff-only` refuses to auto-merge if local `main` has diverged. Divergence on the main checkout is a sign something is wrong — stop the loop and surface it; do not auto-resolve.
+- **You must be on `main`** before this step. If `HEAD` is not `main`, something has gone wrong with prior worktree cleanup — stop and report.
+- **Submodule sync is non-committing.** `git submodule update --remote` may move the `mini-mwp` pointer in the working tree (showing as a dirty submodule in `git status`). That's expected. If the bump is meaningful (new methodology rule that affects how you'd implement the next stage, new version of an invoked skill), commit the submodule pin update as part of step 5b's plan-landscape edits or as its own tiny issue. If it's a no-op for the work ahead, leave it dirty — the next iteration's pull will see the same state and you can decide again.
+- **Network failure stops the loop.** If `git pull` or `git submodule update` fails, do not proceed with stale state — emit a `Stopping: failed to sync main / mini-mwp (<error>)` line and exit without `ScheduleWakeup`.
+
+After the sync succeeds, proceed to step 1.
 
 ## 1. Read the methodology and pick the next stage
 
@@ -324,6 +348,7 @@ Note: filing more issues than you ship is **expected** — the ≥1/stage floor 
 
 ## Guardrails
 
+- **Sync first, every iteration.** Step 0 is non-optional. Pull `main` fast-forward-only and refresh the `mini-mwp` submodule before reading anything else. Stale ground truth corrupts the planning pass and branches the next worktree off a stale base.
 - **Phase-scoped.** Never switch plans without the user — phase handoff is a planning decision.
 - **Route around user-dependent blockers.** A stage blocked on a user decision gets marked `Blocked` in STATUS.md + the plan doc with a one-line note; the iteration picks another unblocked stage in the same phase and continues. Only stop the loop when *every* remaining stage in the phase is blocked. Don't invent answers to user-only decisions.
 - **Worktree-first.** Step 2's hard gate applies to every iteration, including one-line fixes.
