@@ -76,7 +76,28 @@ Stop interviewing when:
 
 If the user gets impatient ("just write it"), stop and write the doc, but flag the remaining gaps inline as `**Open:** ...` bullets so they don't get lost.
 
-### 5. Write the plan doc
+### 5. Open a worktree if not already in one — HARD GATE
+
+Before writing the doc, check whether the session is already in a worktree:
+
+```bash
+git rev-parse --show-toplevel
+git worktree list
+```
+
+If the current toplevel is the main checkout (not a worktree), open one via `EnterWorktree` — this matches the worktree-first gate from `mini-mwp/methodology/workflow-worktrees.md`:
+
+```
+EnterWorktree({ name: "plan-<slug>" })
+```
+
+Use the same slug you intend to use for the plan filename. Verify with `pwd` that the path contains the slug after the tool call. Do **not** use `git worktree add` + manual `cd` — the directory switch won't persist across tool calls.
+
+If the session is already in a worktree (e.g., the user is mid-task and wants to draft a follow-up plan from there), reuse it — don't nest worktrees. Note in the final report which worktree the doc landed in so the user knows where to commit it.
+
+If `EnterWorktree` fails, stop and report the error. Do not fall back to writing in the main checkout.
+
+### 6. Write the plan doc
 
 Create `docs/plans/000N_<slug>.md` with the structure below. Use the slug form the existing plan docs use (kebab-case, descriptive, short).
 
@@ -108,12 +129,13 @@ Create `docs/plans/000N_<slug>.md` with the structure below. Use the slug form t
 
 Match the heading levels, prose density, and section order of the most recent plan doc in the repo if it diverges from the template above — house style wins over the template.
 
-### 6. Report and hand off
+### 7. Report and hand off
 
 Print a short summary:
 
 ```
 Drafted: docs/plans/000N_<slug>.md
+Worktree: <path>
 Stages: <N, or "single stage">
 Open questions: <count, or "none">
 Next: file issues via `/create-issue` (per bullet under "Issues in scope"), then `/next` to pick one up.
