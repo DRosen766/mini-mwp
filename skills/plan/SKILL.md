@@ -85,17 +85,27 @@ git rev-parse --show-toplevel
 git worktree list
 ```
 
-If the current toplevel is the main checkout (not a worktree), open one via `EnterWorktree` — this matches the worktree-first gate from `mini-mwp/methodology/workflow-worktrees.md`:
+If the current toplevel is the main checkout (not a worktree), create a **sibling** worktree via `git worktree add` — this matches the worktree-first gate from `mini-mwp/methodology/workflow-worktrees.md`, and the sibling placement matches the rest of the methodology's tooling (see `skills/create-issue/SKILL.md` step 2).
 
-```
-EnterWorktree({ name: "plan-<slug>" })
+```bash
+REPO=$(basename "$(git rev-parse --show-toplevel)")
+SLUG=<short-kebab-slug-of-plan>
+git worktree add ../${REPO}-wt-plan-${SLUG} -b plan/${SLUG} main
 ```
 
-Use the same slug you intend to use for the plan filename. Verify with `pwd` that the path contains the slug after the tool call. Do **not** use `git worktree add` + manual `cd` — the directory switch won't persist across tool calls.
+Do **not** use the built-in `EnterWorktree` tool — it creates the worktree inside a Claude-managed subdir, not as a sibling of the main checkout, which breaks the rest of the methodology's path assumptions.
+
+Because manual `cd` does not persist across tool calls, **use absolute paths for every subsequent file operation in this skill** rather than trying to switch the session's working directory. Capture the worktree path:
+
+```bash
+WORKTREE=$(cd .. && pwd)/${REPO}-wt-plan-${SLUG}
+```
+
+…and pass `$WORKTREE/docs/plans/000N_<slug>.md` to the Write tool. For git commands that need to run inside the worktree, chain them in a single Bash call with `cd "$WORKTREE" && ...`.
 
 If the session is already in a worktree (e.g., the user is mid-task and wants to draft a follow-up plan from there), reuse it — don't nest worktrees. Note in the final report which worktree the doc landed in so the user knows where to commit it.
 
-If `EnterWorktree` fails, stop and report the error. Do not fall back to writing in the main checkout.
+If `git worktree add` fails (branch already exists, path collision, etc.), stop and report the error. Do not fall back to writing in the main checkout.
 
 ### 6. Write the plan doc
 
